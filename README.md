@@ -23,6 +23,7 @@ Uses spotipy library to fetch spotify track/album info and uses ytdlp to extract
 pip install discord
 pip install spotipy
 pip install yt-dlp
+pip install PyNaCl
 ```
 
 > 2) Get spotify API scopes:
