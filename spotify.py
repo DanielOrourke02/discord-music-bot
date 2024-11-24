@@ -85,20 +85,18 @@ class MusicView(View):
             return
 
         embed = discord.Embed(
-            title=f"Now playing: {current_song[self.guild_id]['title']}",
-            description=f"[{self.progress_bar()}] {self.format_duration(self.progress)} / {self.format_duration(self.duration)}\n[Video Link]({current_song[self.guild_id]['url']})",
+            description=f"Now playing: **{current_song[self.guild_id]['title']}**\n**Duration**\n[{self.progress_bar()}] {self.format_duration(self.progress)} / {self.format_duration(self.duration)}\n[Video Link]({current_song[self.guild_id]['url']})",
             color=discord.Color.green()
         )
         embed.set_thumbnail(url=current_song[self.guild_id]['thumbnail'])
-        embed.set_footer(text=f"Requested by {self.ctx.user.display_name}", icon_url=self.ctx.user.avatar.url)
 
         await self.message.edit(embed=embed, view=self)
 
-    @discord.ui.button(label="Volume", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Volume", style=discord.ButtonStyle.secondary)
     async def change_volume(self, button: Button, interaction: discord.Interaction):
         await interaction.response.send_message("Use `/volume` to change the volume.", ephemeral=True)
 
-    @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Skip", style=discord.ButtonStyle.primary)
     async def skip(self, button: Button, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         vc = discord.utils.get(bot.voice_clients, guild__id=guild_id)
@@ -143,15 +141,19 @@ async def play_next_song(guild_id):
         # Create and update progress view
         ctx = next_song["ctx"]
         view = MusicView(ctx, next_song["duration"], guild_id)
+        
         embed = discord.Embed(
-            title=f"Now playing: {next_song['title']}",
-            description=f"[▬🔘▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬] 0:00 / {view.format_duration(next_song['duration'])}\n[Video Link]({next_song['url']})",
+            description=f"Now playing: **{next_song['title']}**\n**Duration**\n[▬🔘▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬] 0:00 / {view.format_duration(next_song['duration'])}\n[Video Link]({next_song['url']})",
             color=discord.Color.green()
         )
         embed.set_thumbnail(url=next_song['thumbnail'])
-        embed.set_footer(text=f"Requested by {ctx.user.display_name}", icon_url=ctx.user.avatar.url)
+        avatar_url = ctx.user.avatar.url if ctx.user.avatar else None
+        if avatar_url:
+            embed.set_thumbnail(url=avatar_url)
+        embed.set_footer(text=f"Stock's MM Services", icon_url=ctx.bot.user.avatar.url)
+        embed.timestamp = discord.utils.utcnow()
 
-        view.message = await ctx.send(embed=embed, view=view)
+        view.message = await ctx.respond(embed=embed, view=view)
         view.update_progress.start()
     else:
         await vc.disconnect()
