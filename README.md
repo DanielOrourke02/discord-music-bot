@@ -6,12 +6,12 @@ Just so i can flex my godly programming powers and my years of experience I deci
 
 I basically just took their code and imporved it drastically.
 
-## installation
+## Installation
 
-1. clone repo
+1. Clone repo
 
 ```powershell
-git clonehttps://github.com/DanielOrourke02/discord-music-bot
+git clone https://github.com/DanielOrourke02/discord-music-bot
 ```
 
 2. Create venv and install requirements
