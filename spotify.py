@@ -13,8 +13,10 @@ volumes = {}
 
 @bot.event
 async def on_ready():
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="/play"))
     print(f"Bot is ready and online as {bot.user}")
-
+    monitor_voice_connections.start()
+    
 # Load configuration
 with open('config.json', 'r') as config_file:
     config = json.load(config_file)
@@ -34,6 +36,16 @@ ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
 song_queue = {}  # Guild-specific song queue
 current_song = {}  # Tracks currently playing songs and their details
+
+@tasks.loop(seconds=10)
+async def monitor_voice_connections():
+    """Check all voice clients and disconnect inactive ones."""
+    for vc in bot.voice_clients:
+        if not vc.is_playing() and not song_queue.get(vc.guild.id):
+            await asyncio.sleep(10)  # Wait 10 seconds before disconnecting
+            if not vc.is_playing() and not song_queue.get(vc.guild.id):
+                logging.info(f"Disconnecting from {vc.guild.name} due to inactivity.")
+                await vc.disconnect()
 
 
 async def search_youtube(query):
@@ -120,11 +132,19 @@ class MusicView(View):
             await interaction.response.send_message("Bot is not connected to a voice channel.", ephemeral=True)
 
 
+async def handle_after_callback(error, guild_id):
+    """Handle errors and play the next song after the current one ends."""
+    if error:
+        logging.error(f"Playback error in guild {guild_id}: {error}")
+    await play_next_song(guild_id)
+
+
 async def play_next_song(guild_id):
     """Plays the next song in the queue for the given guild."""
     vc = discord.utils.get(bot.voice_clients, guild__id=guild_id)
 
     if not vc or not vc.is_connected():
+        logging.info(f"Bot is no longer connected to a voice channel in guild {guild_id}.")
         return
 
     if guild_id in song_queue and song_queue[guild_id]:
@@ -135,8 +155,9 @@ async def play_next_song(guild_id):
         source.volume = volumes.get(guild_id, 1.0)
 
         vc.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(
-            play_next_song(guild_id), bot.loop
+            handle_after_callback(e, guild_id), bot.loop
         ).result())
+
 
         # Create and update progress view
         ctx = next_song["ctx"]
@@ -158,6 +179,22 @@ async def play_next_song(guild_id):
     else:
         await vc.disconnect()
 
+
+async def ensure_connection(vc, channel):
+    """Ensure the bot is connected to the voice channel."""
+    if not vc or not vc.is_connected():
+        try:
+            vc = await channel.connect()
+            logging.info(f"Reconnected to {channel.name} in guild {channel.guild.name}.")
+        except Exception as e:
+            logging.error(f"Failed to reconnect: {e}")
+
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    """Detect when the bot is disconnected from a voice channel."""
+    if member == bot.user and before.channel and not after.channel:
+        logging.warning(f"Bot was disconnected from {before.channel.name} in guild {before.channel.guild.name}.")
 
 @bot.slash_command(name="play", description="Play a song from YouTube.")
 async def play_command(ctx: discord.ApplicationContext, query: str):
@@ -197,7 +234,7 @@ async def play_command(ctx: discord.ApplicationContext, query: str):
         await play_next_song(guild_id)
 
 @bot.slash_command(name="volume", description="Change the volume of the current song.")
-async def volume(ctx: discord.ApplicationContext, volume: discord.Option(int, description="Volume (1-100)", min_value=1, max_value=100, required=True)): # type: ignore
+async def volume(ctx: discord.ApplicationContext, volume: discord.Option(int, description="Volume (1-100)", min_value=1, max_value=100, required=True)):  # type: ignore
     guild_id = ctx.guild.id
     volumes[guild_id] = volume / 100
 
